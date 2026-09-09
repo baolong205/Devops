@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Giới thiệu bản thân</title>
+  <title>Giới thiệu bản thân - Hoàng Ngọc Bảo Long</title>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --ink: #17212b;
@@ -123,6 +125,38 @@
       font-size: 0.85rem;
     }
 
+    /* Khung để lại lời nhắn lưu vào Supabase */
+    .contact-form {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .contact-form input, .contact-form textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 0.9rem;
+    }
+
+    .contact-form button {
+      align-self: flex-start;
+      padding: 10px 18px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-family: Arial, sans-serif;
+      font-weight: bold;
+    }
+
+    .contact-form button:hover {
+      background: var(--accent-dark);
+    }
+
     footer {
       display: flex;
       justify-content: space-between;
@@ -198,18 +232,22 @@
         <p>
           Mình hiện đang học tập và làm việc trong lĩnh vực phát triển web. Mình thích biến
           những vấn đề phức tạp thành các sản phẩm đơn giản, dễ dùng và có giá trị thực tế.
-          Ngoài giờ làm, mình thường đọc sách, nghe nhạc và khám phá những địa điểm mới.
         </p>
+
+        <!-- Form tương tác gửi dữ liệu lên Supabase -->
+        <h2 style="margin-top: 32px; font-size: 1.4rem;">Gửi lời nhắn</h2>
+        <form class="contact-form" id="msg-form">
+          <input type="text" id="guest-name" placeholder="Tên của bạn" required />
+          <textarea id="guest-msg" rows="3" placeholder="Nội dung lời nhắn..." required></textarea>
+          <button type="submit" id="btn-submit">Gửi tin nhắn</button>
+          <p id="status" style="font-size: 0.85rem; display: none;"></p>
+        </form>
       </section>
 
       <section>
-        <h2>Kỹ năng</h2>
-        <ul class="skills">
-          <li>HTML &amp; CSS</li>
-          <li>JavaScript</li>
-          <li>Thiết kế giao diện</li>
-          <li>Làm việc nhóm</li>
-          <li>Giải quyết vấn đề</li>
+        <h2>Kỹ năng (từ Supabase)</h2>
+        <ul class="skills" id="skills-list">
+          <li>Đang đồng bộ dữ liệu...</li>
         </ul>
       </section>
     </main>
@@ -219,5 +257,78 @@
       <a href="mailto:baolong@example.com">baolong@example.com</a>
     </footer>
   </div>
+
+  <script>
+    // Placeholder token để GitHub Actions thay thế tự động
+    const SUPABASE_URL = '__SUPABASE_URL__';
+    const SUPABASE_KEY = '__SUPABASE_ANON_KEY__';
+
+    const hasSupabaseConfig = ![SUPABASE_URL, SUPABASE_KEY].some(value => value.startsWith('__'));
+    const client = hasSupabaseConfig
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+      : null;
+
+    // 1. Tải danh sách kỹ năng từ Supabase
+    async function fetchSkills() {
+      const listEl = document.getElementById('skills-list');
+      if (!client) {
+        listEl.innerHTML = '<li>Chưa cấu hình Supabase</li>';
+        return;
+      }
+
+      const { data, error } = await client.from('skills').select('name');
+
+      if (error || !data || data.length === 0) {
+        // Fallback danh sách mặc định nếu chưa có data
+        listEl.innerHTML = `
+          <li>HTML &amp; CSS</li>
+          <li>JavaScript</li>
+          <li>React / Node.js</li>
+          <li>Supabase</li>
+        `;
+        return;
+      }
+
+      listEl.replaceChildren(...data.map(item => {
+        const itemElement = document.createElement('li');
+        itemElement.textContent = item.name;
+        return itemElement;
+      }));
+    }
+
+    // 2. Gửi lời nhắn lưu vào bảng 'guestbook'
+    const form = document.getElementById('msg-form');
+    const statusText = document.getElementById('status');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!client) {
+        statusText.style.display = 'block';
+        statusText.style.color = 'red';
+        statusText.textContent = 'Chưa cấu hình Supabase.';
+        return;
+      }
+
+      const name = document.getElementById('guest-name').value;
+      const content = document.getElementById('guest-msg').value;
+
+      statusText.style.display = 'block';
+      statusText.style.color = 'var(--muted)';
+      statusText.textContent = 'Đang gửi...';
+
+      const { error } = await client.from('guestbook').insert([{ name, content }]);
+
+      if (error) {
+        statusText.style.color = 'red';
+        statusText.textContent = 'Gửi thất bại: ' + error.message;
+      } else {
+        statusText.style.color = 'green';
+        statusText.textContent = 'Đã gửi thành công!';
+        form.reset();
+      }
+    });
+
+    fetchSkills();
+  </script>
 </body>
 </html>
