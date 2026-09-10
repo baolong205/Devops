@@ -1,5 +1,11 @@
 {
+  "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.js",
+    "deploy": "npm run prepare-assets && wrangler deploy",
+    "preview": "npm run prepare-assets && wrangler dev"
+  },
   "devDependencies": {
-    "supabase": "^2.116.0"
+    "supabase": "^2.116.0",
+    "wrangler": "^4.36.0"
   }
 }
