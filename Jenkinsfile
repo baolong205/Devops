@@ -5,6 +5,12 @@ pipeline {
         githubPush()
     }
 
+    environment {
+        VERCEL_ORG_ID = credentials('vercel-org-id')
+        VERCEL_PROJECT_ID = credentials('vercel-project-id')
+        VERCEL_TOKEN = credentials('vercel-token')
+    }
+
     stages {
         stage('Install dependencies') {
             steps {
@@ -23,6 +29,16 @@ pipeline {
         stage('Prepare assets') {
             steps {
                 sh 'npm run prepare-assets'
+            }
+        }
+
+        stage('Deploy to Vercel') {
+            steps {
+                sh '''
+                    npx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" --project="$VERCEL_PROJECT_ID"
+                    npx vercel@latest build --prod --token="$VERCEL_TOKEN"
+                    npx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" --project="$VERCEL_PROJECT_ID"
+                '''
             }
         }
     }
