@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import secrets
-import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -126,22 +125,10 @@ class Controller:
 def github_credential():
     if os.environ.get("CLINIC_GITHUB_TOKEN"):
         return os.environ.get("CLINIC_GITHUB_USER", "vxxngw"), os.environ["CLINIC_GITHUB_TOKEN"]
-    result = subprocess.run(
-        ["git", "credential", "fill"],
-        input="protocol=https\nhost=github.com\npath=vxxngw/DevOps.git\n\n",
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
-    if result.returncode or not values.get("password"):
-        raise RuntimeError(
-            "No Git credential available; authenticate Git without pasting tokens into chat"
-        )
-    return values.get("username", "vxxngw"), values["password"]
+    return None
 
 
-def job_xml():
+def job_xml(authenticated=False):
     root = ET.Element("flow-definition", plugin="workflow-job")
     ET.SubElement(root, "description").text = OWNER
     properties = ET.SubElement(root, "properties")
@@ -150,13 +137,14 @@ def job_xml():
         "parameterDefinitions",
     )
     for name, value in {
-        "SOURCE_REF": "codex/milestone-4",
-        "SOURCE_BRANCH": "codex/milestone-4",
+        "SOURCE_REF": os.environ.get("CLINIC_SOURCE_REF", "codex/milestone-4"),
+        "SOURCE_BRANCH": os.environ.get("CLINIC_SOURCE_BRANCH", "codex/milestone-4"),
         "CLUSTER_SERVER_URL": "https://192.168.150.11:6443",
         "STAGING_URL": "https://staging.anuyen.test",
         "PRODUCTION_URL": "https://hospital.anuyen.test",
         "SECURITY_DEMO": "none",
         "PRODUCTION_APPROVERS": "clinic-admin",
+        "REGISTRY_NAMESPACE": os.environ.get("CLINIC_REGISTRY", "ghcr.io/vxxngw"),
     }.items():
         field = ET.SubElement(definitions, "hudson.model.StringParameterDefinition")
         ET.SubElement(field, "name").text = name
@@ -178,8 +166,11 @@ def job_xml():
     remote = ET.SubElement(
         ET.SubElement(scm, "userRemoteConfigs"), "hudson.plugins.git.UserRemoteConfig"
     )
-    ET.SubElement(remote, "url").text = "https://github.com/vxxngw/DevOps.git"
-    ET.SubElement(remote, "credentialsId").text = "clinic-github"
+    ET.SubElement(remote, "url").text = os.environ.get(
+        "CLINIC_REPO_URL", "https://github.com/vxxngw/DevOps.git"
+    )
+    if authenticated:
+        ET.SubElement(remote, "credentialsId").text = "clinic-github"
     ET.SubElement(
         remote, "refspec"
     ).text = "+refs/heads/*:refs/remotes/origin/* +refs/pull/*/head:refs/remotes/origin/pr/*"
@@ -198,12 +189,15 @@ def configure():
     controller = Controller()
     folder_xml = f'<com.cloudbees.hudson.plugins.folder.Folder plugin="cloudbees-folder"><description>{OWNER}</description><properties/></com.cloudbees.hudson.plugins.folder.Folder>'.encode()
     controller.owned_item("/job/" + FOLDER, folder_xml)
-    username, token = github_credential()
-    controller.credential("clinic-github", username, token)
+    scm_credential = github_credential()
+    if scm_credential:
+        controller.credential("clinic-github", *scm_credential)
     registry_token = ROOT / ".registry-token"
     if registry_token.is_file() and registry_token.read_text(encoding="utf-8-sig").strip():
         controller.credential(
-            "clinic-ghcr", "vxxngw", registry_token.read_text(encoding="utf-8-sig").strip()
+            "clinic-ghcr",
+            os.environ.get("CLINIC_REGISTRY_USER", "vxxngw"),
+            registry_token.read_text(encoding="utf-8-sig").strip(),
         )
     else:
         print("GHCR credential not available yet; publish remains blocked")
@@ -235,7 +229,7 @@ println(j.getComputer('clinic-ci-linux').getJnlpMac())
     values = read_settings()
     values["CLINIC_JENKINS_AGENT_SECRET"] = secret
     write_settings(values)
-    controller.owned_item(f"/job/{FOLDER}/job/{JOB}", job_xml())
+    controller.owned_item(f"/job/{FOLDER}/job/{JOB}", job_xml(authenticated=bool(scm_credential)))
     print(
         "Configured dedicated authenticated controller, project folder, SCM credential, agent and pipeline"
     )
@@ -316,7 +310,10 @@ def github_webhook(public_url):
     secret = secret_file.read_text(encoding="utf-8").strip()
     if len(secret) < 32:
         raise ValueError("Missing local webhook secret; run configure-webhook first")
-    username, token = github_credential()
+    credential = github_credential()
+    if credential is None:
+        raise RuntimeError("GitHub webhook management requires an explicit CLINIC_GITHUB_TOKEN")
+    username, token = credential
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     base = "https://api.github.com/repos/vxxngw/DevOps"
     endpoint = public_url.rstrip("/") + "/github"

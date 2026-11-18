@@ -17,9 +17,10 @@ pipeline {
         booleanParam(name: 'DEPLOY', defaultValue: false, description: 'Mốc3: requires Kubernetes overlays, namespace credentials and smoke accounts')
         choice(name: 'SECURITY_DEMO', choices: ['none', 'secret', 'critical'], description: 'Intentional negative gate; must fail before push/deploy')
         string(name: 'PRODUCTION_APPROVERS', defaultValue: 'clinic-admin', description: 'Real Jenkins users permitted to approve production')
+        string(name: 'REGISTRY_NAMESPACE', defaultValue: 'ghcr.io/vxxngw', description: 'GHCR namespace owned by the registry credential account')
     }
     environment {
-        CLINIC_REGISTRY = 'ghcr.io/vxxngw'
+        CLINIC_REGISTRY = "${params.REGISTRY_NAMESPACE}"
         TRIVY_CACHE_DIR = '/home/jenkins/.cache/trivy'
         PIP_INDEX_URL = 'https://pypi.org/simple'
         PIP_DISABLE_PIP_VERSION_CHECK = '1'
@@ -28,6 +29,9 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
+                    if (!(params.REGISTRY_NAMESPACE ==~ /ghcr\.io\/[a-z0-9][a-z0-9-]{0,38}/)) {
+                        error('Invalid GHCR namespace')
+                    }
                     if (!(params.SOURCE_REF ==~ /[a-zA-Z0-9][a-zA-Z0-9._\/-]{0,160}/)) {
                         error('Invalid SOURCE_REF')
                     }

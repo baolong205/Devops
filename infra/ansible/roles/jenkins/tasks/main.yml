@@ -4,7 +4,6 @@
     that:
       - clinic_repo_revision is match('^[a-f0-9]{40}$')
       - vault_jenkins_admin_password | length >= 24
-      - vault_github_read_token | length > 0
       - vault_registry_write_token | length > 0
   no_log: true
 - name: Prepare project checkout directory
@@ -30,7 +29,7 @@
   environment:
     GIT_ASKPASS: /usr/local/bin/clinic-git-askpass
     GIT_TERMINAL_PROMPT: '0'
-    CLINIC_GITHUB_TOKEN: "{{ vault_github_read_token }}"
+    CLINIC_GITHUB_TOKEN: "{{ vault_github_read_token | default('') }}"
   register: clinic_checkout
   no_log: true
 - name: Initialize local CI environment once, preserving agent secret on reruns
@@ -73,7 +72,12 @@
     argv: [/opt/clinic-bootstrap-venv/bin/python, scripts/bootstrap-ci.py, configure]
     chdir: "{{ clinic_repo_dir }}"
   environment:
-    CLINIC_GITHUB_TOKEN: "{{ vault_github_read_token }}"
+    CLINIC_GITHUB_TOKEN: "{{ vault_github_read_token | default('') }}"
+    CLINIC_REGISTRY_USER: "{{ clinic_registry_user | default('vxxngw') }}"
+    CLINIC_REGISTRY: "ghcr.io/{{ clinic_registry_user | default('vxxngw') }}"
+    CLINIC_REPO_URL: "{{ clinic_repo_url }}"
+    CLINIC_SOURCE_REF: "{{ clinic_repo_revision }}"
+    CLINIC_SOURCE_BRANCH: "{{ clinic_source_branch | default('deploy/baolong205-jenkins') }}"
   no_log: true
   when: clinic_checkout.changed or not clinic_bootstrap_marker.stat.exists
 - name: Ensure bootstrap marker directory
